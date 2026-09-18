@@ -23,7 +23,7 @@ app.set('io', io);
 
 // ponytail: CSP off — the app loads fonts, map tiles and photos from several origins; add a policy listing them when hardening further
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '1mb' })); // room for an uploaded cover photo (base64, capped at ~500 KB by the route)
 // brute-force guard on credentials; per IP (set TRUST_PROXY=1 behind a reverse proxy so the real client IP is used)
 const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, skip: () => process.env.NODE_ENV === 'test', message: { error: 'too many attempts, try again in 15 minutes' } });
 app.use('/api/auth/login', authLimit);

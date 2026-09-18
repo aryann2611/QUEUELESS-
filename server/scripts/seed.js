@@ -2,7 +2,8 @@
 // Run: npm run seed            (same MONGO_URI / embedded db as the server; idempotent — shops are matched by name)
 //      npm run seed -- 28.6139 77.2090   (drop the demo city somewhere else: <lat> <lng>)
 import bcrypt from 'bcryptjs';
-import { User, Queue, Token, Appointment } from '../src/models.js';
+import { User, Queue, Token, Appointment, Review } from '../src/models.js';
+import { refreshRating } from '../src/reviews.js';
 
 const argLat = Number(process.argv[2]), argLng = Number(process.argv[3]);
 const CENTER = Number.isFinite(argLat) && Number.isFinite(argLng) ? { lat: argLat, lng: argLng }
@@ -18,11 +19,11 @@ const SHOPS = [
     description: 'Family physician. Walk-ins welcome, appointments preferred.', services: [['General Consultation', 10], ['Follow-up', 6], ['Emergency', 15]] },
   { name: 'Smile Dental Care', category: 'medical', dLat: -0.03, dLng: 0.03, avg: 18, queue: 2, served: 4, street: '7 Swaroop Nagar', phone: '+91 98765 66666', image: img('photo-1606811841689-23dfddce3e95'),
     description: 'Dental check-ups, cleaning and orthodontics.', services: [['Check-up', 15], ['Cleaning', 25], ['Filling', 30]] },
-  { name: 'Kakadeo Eye Care', category: 'medical', dLat: 0.028, dLng: -0.035, avg: 12, queue: 5, served: 11, street: '118/44 Kakadeo', phone: '+91 98765 77777', image: img('photo-1579684385127-1ef15d508118'),
+  { name: 'Kakadeo Eye Care', category: 'medical', dLat: 0.028, dLng: -0.035, avg: 12, queue: 5, served: 11, street: '118/44 Kakadeo', phone: '+91 98765 77777', image: img('photo-1591076482161-42ce6da69f67'),
     description: 'Eye examinations, spectacles and contact lens fitting.', services: [['Eye Examination', 12], ['Contact Lens Fitting', 20], ['Prescription Update', 8]] },
-  { name: 'Lifeline Diagnostics', category: 'medical', dLat: -0.012, dLng: -0.024, avg: 8, queue: 7, served: 22, street: 'Kidwai Nagar Crossing', phone: '+91 98765 88888', image: img('photo-1581093588401-fbb62a02f120'), hours: ['07:00', '20:00'],
+  { name: 'Lifeline Diagnostics', category: 'medical', dLat: -0.012, dLng: -0.024, avg: 8, queue: 7, served: 22, street: 'Kidwai Nagar Crossing', phone: '+91 98765 88888', image: img('photo-1579154204601-01588f351e67'), hours: ['07:00', '20:00'],
     description: 'Blood tests, X-ray, ECG and ultrasound. Reports the same day.', services: [['Blood Test', 5], ['X-ray', 10], ['ECG', 10], ['Ultrasound', 20]] },
-  { name: 'Dr. Mehta Child Clinic', category: 'medical', dLat: 0.045, dLng: 0.012, avg: 10, queue: 4, served: 6, street: 'Arya Nagar', phone: '+91 98765 99999', image: img('photo-1584515933487-779824d29309'), hours: ['10:00', '14:00'],
+  { name: 'Dr. Mehta Child Clinic', category: 'medical', dLat: 0.045, dLng: 0.012, avg: 10, queue: 4, served: 6, street: 'Arya Nagar', phone: '+91 98765 99999', image: img('photo-1631217868264-e5b90bb7e133'), hours: ['10:00', '14:00'],
     description: 'Paediatrician. Vaccinations every morning.', services: [['Consultation', 10], ['Vaccination', 5], ['Growth Check', 8]] },
   { name: 'PetCare Animal Clinic', category: 'medical', dLat: -0.041, dLng: -0.008, avg: 15, queue: 1, served: 3, street: 'Ratanlal Nagar', phone: '+91 98765 12121', image: img('photo-1548767797-d8c844163c4c'),
     description: 'Vet for dogs, cats and birds. Grooming on weekends.', services: [['Vet Consultation', 15], ['Vaccination', 10], ['Grooming', 40]] },
@@ -40,19 +41,19 @@ const SHOPS = [
     description: 'Account services, loans and lockers.', services: [['Account Services', 8], ['Loan Enquiry', 15], ['Cash Deposit', 4]] },
   { name: 'Union Trust Bank — Civil Lines', category: 'bank', dLat: -0.003, dLng: 0.022, avg: 7, queue: 8, served: 40, street: 'Civil Lines, near GPO', phone: '+91 98765 34343', image: img('photo-1601597111158-2fceff292cdc'), hours: ['10:00', '16:00'],
     description: 'Savings, KYC updates, demand drafts and forex.', services: [['KYC Update', 10], ['Demand Draft', 6], ['Cheque Deposit', 3], ['Forex', 15]] },
-  { name: 'Post Office Savings Bank', category: 'bank', dLat: 0.031, dLng: 0.041, avg: 9, queue: 5, served: 18, street: 'Head Post Office, Bada Chauraha', phone: '+91 98765 35353', image: img('photo-1586769852836-bc069f19e1b6'), hours: ['09:30', '17:00'],
+  { name: 'Post Office Savings Bank', category: 'bank', dLat: 0.031, dLng: 0.041, avg: 9, queue: 5, served: 18, street: 'Head Post Office, Bada Chauraha', phone: '+91 98765 35353', image: img('photo-1556740758-90de374c12ad'), hours: ['09:30', '17:00'],
     description: 'Savings accounts, recurring deposits, speed post.', services: [['Passbook Update', 5], ['Speed Post', 4], ['New Account', 20]] },
   // --- government ---
   { name: 'RTO Office', category: 'government', dLat: -0.018, dLng: -0.012, avg: 12, queue: 5, served: 26, street: 'Transport Nagar', phone: '+91 98765 44444', image: img('photo-1450101499163-c8848c66ca85'), hours: ['10:00', '17:00'],
     description: 'Driving licence and vehicle registration counter.', services: [['Licence Renewal', 12], ['Vehicle Registration', 20], ['Address Change', 10]] },
-  { name: 'Passport Seva Kendra', category: 'government', dLat: 0.02, dLng: -0.03, avg: 14, queue: 9, served: 35, street: 'Mega Mall, Kalyanpur', phone: '+91 98765 45454', image: img('photo-1554224155-8d04cb21cd6c'), hours: ['09:00', '16:30'],
+  { name: 'Passport Seva Kendra', category: 'government', dLat: 0.02, dLng: -0.03, avg: 14, queue: 9, served: 35, street: 'Mega Mall, Kalyanpur', phone: '+91 98765 45454', image: img('photo-1521295121783-8a321d551ad2'), hours: ['09:00', '16:30'],
     description: 'Passport applications, renewals and police verification queries.', services: [['New Passport', 20], ['Renewal', 12], ['Document Verification', 8]] },
   { name: 'Aadhaar Enrolment Centre', category: 'government', dLat: -0.035, dLng: 0.014, avg: 10, queue: 0, served: 15, street: 'Barra Bypass', phone: '+91 98765 46464', image: img('photo-1521791136064-7986c2920216'), open: false, hours: ['10:00', '15:00'],
     description: 'New enrolments and biometric/mobile updates.', services: [['New Enrolment', 15], ['Biometric Update', 10], ['Mobile Number Update', 5]] },
   { name: 'Electricity Bill Counter', category: 'government', dLat: 0.006, dLng: 0.048, avg: 5, queue: 6, served: 44, street: 'Vijay Nagar Sub-station', phone: '+91 98765 47474', image: img('photo-1473341304170-971dccb5ac1e'), hours: ['09:00', '18:00'],
     description: 'Bill payments, new connections and meter complaints.', services: [['Bill Payment', 3], ['New Connection', 15], ['Meter Complaint', 8]] },
   // --- repair ---
-  { name: 'FixIt Mobile Repair', category: 'repair', dLat: 0.02, dLng: 0.02, avg: 15, queue: 2, served: 7, street: '21 Station Road', phone: '+91 98765 55555', image: img('photo-1597872200969-2b65d56bd16b'),
+  { name: 'FixIt Mobile Repair', category: 'repair', dLat: 0.02, dLng: 0.02, avg: 15, queue: 2, served: 7, street: '21 Station Road', phone: '+91 98765 55555', image: img('photo-1580910051074-3eb694886505'),
     description: 'Phone and laptop repair while you wait.', services: [['Screen Replacement', 30], ['Battery', 20], ['Diagnosis', 10]] },
   { name: 'QuickFix Laptop Service', category: 'repair', dLat: -0.015, dLng: 0.036, avg: 25, queue: 3, served: 4, street: 'Naveen Market', phone: '+91 98765 56565', image: img('photo-1588508065123-287b28e013da'),
     description: 'Laptop, printer and desktop repairs. Data recovery.', services: [['Diagnosis', 15], ['OS Reinstall', 40], ['Keyboard Replacement', 25]] },
@@ -61,7 +62,7 @@ const SHOPS = [
   // --- other ---
   { name: 'Express Laundry & Dry Clean', category: 'other', dLat: -0.026, dLng: -0.03, avg: 4, queue: 2, served: 12, street: 'Shastri Nagar', phone: '+91 98765 61616', image: img('photo-1517677208171-0bc6725a3e60'), hours: ['08:00', '20:00'],
     description: 'Drop-off counter. Same-day service before noon.', services: [['Drop-off', 3], ['Pick-up', 3], ['Express Order', 5]] },
-  { name: 'Master Tailors & Alterations', category: 'other', dLat: 0.001, dLng: -0.044, avg: 12, queue: 3, served: 5, street: 'Naughara, Chowk', phone: '+91 98765 62626', image: img('photo-1558618047-3c8c76ca7d13'), hours: ['10:00', '20:00'],
+  { name: 'Master Tailors & Alterations', category: 'other', dLat: 0.001, dLng: -0.044, avg: 12, queue: 3, served: 5, street: 'Naughara, Chowk', phone: '+91 98765 62626', image: img('photo-1558769132-cb1aea458c5e'), hours: ['10:00', '20:00'],
     description: 'Measurements, alterations and school uniforms.', services: [['Measurement', 10], ['Alteration Drop-off', 5], ['Trial', 15]] },
 ];
 
@@ -135,6 +136,35 @@ async function expressHistory(queue, s, i, people) {
   if (history.length) await Token.collection.insertMany(history);
 }
 
+// What customers say, by category; rating decides which pool a comment comes from
+const PRAISE = {
+  medical: ['Doctor listened patiently and explained everything.', 'Clean clinic, hardly any wait thanks to the token.', 'Got called exactly when the app said. Very smooth.', 'Staff were kind with my kid.'],
+  salon: ['Loved the cut, exactly what I asked for.', 'Booked from the car and walked straight in.', 'Great vibe and no waiting around.', 'Stylist was quick and careful.'],
+  bank: ['Counter staff were helpful and quick.', 'No more standing in line — joined from home.', 'Work done in ten minutes.'],
+  government: ['Much better than the old token system.', 'Documents verified without any fuss.', 'Officer was polite and efficient.'],
+  repair: ['Fixed while I waited. Fair price.', 'Honest diagnosis, no upselling.', 'Quick turnaround and works perfectly now.'],
+  other: ['Friendly service, will come again.', 'Quick and professional.', 'Exactly as promised.'],
+};
+const GRIPES = ['Waited longer than the estimate said.', 'Service was fine but the place was crowded.', 'Okay experience, could be faster.', 'Had to ask twice before being attended.'];
+const REPLIES = ['Thank you! See you next time.', 'Sorry about the wait — we have added a second counter at peak hours.', 'Glad we could help.', 'Thanks for the feedback, we are working on it.'];
+
+// Reviews for roughly half of a shop's served visits, skewed positive, with the occasional owner reply
+async function seedReviews(queue, i) {
+  const served = await Token.find({ queue: queue._id, status: 'served' }).sort('createdAt');
+  const docs = [];
+  served.forEach((t, k) => {
+    if ((k * 7 + i) % 9 > 4) return;
+    const n = k * 13 + i * 3;
+    const rating = n % 11 === 0 ? 2 : n % 5 === 0 ? 3 : n % 3 === 0 ? 4 : 5;
+    const pool = rating >= 4 ? PRAISE[queue.category] || PRAISE.other : GRIPES;
+    const at = new Date((t.doneAt ?? t.createdAt).getTime() + (5 + (n % 40)) * 60000);
+    docs.push({ queue: queue._id, user: t.user, token: t._id, rating, service: t.service, comment: n % 4 === 3 ? '' : pool[n % pool.length], createdAt: at, updatedAt: at,
+      ...(n % 6 === 1 && { reply: { text: REPLIES[rating >= 4 ? (n % 3 === 0 ? 0 : 2) : (n % 2 ? 1 : 3)], at: new Date(at.getTime() + 3600000 * (2 + (n % 20))) } }) });
+  });
+  if (docs.length) await Review.collection.insertMany(docs);
+  await refreshRating(queue._id);
+}
+
 export async function seed() {
   const admin = await upsertUser('Admin', process.env.ADMIN_EMAIL || 'admin@example.com', 'admin');
   const customer = await upsertUser('Aarav Customer', 'user@example.com', 'user');
@@ -144,7 +174,10 @@ export async function seed() {
   for (const [i, s] of [...SHOPS, ...extraShops()].entries()) {
     const existing = await Queue.findOne({ name: s.name });
     if (existing) {
+      // swap out a stock photo we've since replaced; a vendor's own upload or URL is left alone
+      if (existing.image !== s.image && /images\.unsplash\.com/.test(existing.image)) await Queue.updateOne({ _id: existing._id }, { image: s.image });
       if (s.express && !(await Token.exists({ queue: existing._id, 'express.paymentId': { $exists: true } }))) await expressHistory(existing, s, i, people);
+      if (!(await Review.exists({ queue: existing._id }))) await seedReviews(existing, i);
       continue;
     }
     const vendor = await upsertUser(`${s.name} Owner`, `${slug(s.name)}@example.com`, 'staff');
@@ -168,6 +201,7 @@ export async function seed() {
       await Token.collection.updateOne({ _id: t._id }, { $set: { createdAt } }); // .collection: Mongoose strips createdAt from $set
     }
     if (s.express) await expressHistory(queue, s, i, people);
+    await seedReviews(queue, i);
     // one customer at each counter, the rest waiting
     for (let k = 0; k < s.queue; k++) {
       const atCounter = k < queue.counters;

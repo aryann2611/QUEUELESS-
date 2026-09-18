@@ -30,6 +30,7 @@ const VServices = lazy(() => import('./pages/vendor/Services.jsx'))
 const VAnalytics = lazy(() => import('./pages/vendor/Analytics.jsx'))
 const VSettings = lazy(() => import('./pages/vendor/Settings.jsx'))
 const VSales = lazy(() => import('./pages/vendor/Sales.jsx'))
+const VReviews = lazy(() => import('./pages/vendor/Reviews.jsx'))
 const ADashboard = lazy(() => import('./pages/admin/Dashboard.jsx'))
 const AShops = lazy(() => import('./pages/admin/Lists.jsx').then((m) => ({ default: m.Shops })))
 const AUsers = lazy(() => import('./pages/admin/Lists.jsx').then((m) => ({ default: m.UsersPage })))
@@ -95,6 +96,7 @@ export default function App() {
                       <Route path="services" element={<VServices />} />
                       <Route path="analytics" element={<VAnalytics />} />
                       <Route path="sales" element={<VSales />} />
+                      <Route path="reviews" element={<VReviews />} />
                       <Route path="settings" element={<VSettings />} />
                     </Route>
                   </Route>

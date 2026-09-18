@@ -344,6 +344,28 @@ test('queue flow over HTTP', async () => {
   r = await api('GET', '/api/admin/transactions', { token: staff });
   assert.equal(r.status, 403);
 
+  // ---- reviews: only a served visit can be rated, once; owner replies; shop carries the average ----
+  r = await api('POST', `/api/queues/${qid}/reviews`, { token: user2, body: { tokenId: t1, rating: 5 } });
+  assert.equal(r.status, 404); // not user2's visit
+  r = await api('POST', `/api/queues/${qid}/reviews`, { token: user1, body: { tokenId: t1, rating: 6 } });
+  assert.equal(r.status, 400);
+  r = await api('POST', `/api/queues/${qid}/reviews`, { token: user1, body: { tokenId: t1, rating: 4, comment: ' Quick and kind. ' } });
+  assert.equal(r.status, 201);
+  assert.deepEqual([r.body.review.rating, r.body.review.comment, r.body.review.user.name, r.body.rating], [4, 'Quick and kind.', 'User One', { avg: 4, count: 1 }]);
+  const rid = r.body.review._id;
+  r = await api('POST', `/api/queues/${qid}/reviews`, { token: user1, body: { tokenId: t1, rating: 5 } });
+  assert.equal(r.status, 409);
+  r = await api('GET', `/api/tokens/${t1}`, { token: user1 });
+  assert.deepEqual(r.body.ticket.review, { rating: 4, comment: 'Quick and kind.' });
+  r = await api('GET', `/api/queues/${qid}`);
+  assert.deepEqual(r.body.queue.rating, { avg: 4, count: 1 });
+  r = await api('PATCH', `/api/queues/${qid}/reviews/${rid}`, { token: user1, body: { reply: 'thanks' } });
+  assert.equal(r.status, 403);
+  r = await api('PATCH', `/api/queues/${qid}/reviews/${rid}`, { token: staff, body: { reply: 'Thank you!' } });
+  assert.equal(r.body.review.reply.text, 'Thank you!');
+  r = await api('GET', `/api/queues/${qid}/reviews`);
+  assert.deepEqual([r.body.avg, r.body.count, r.body.byStar[1], r.body.reviews[0].reply.text], [4, 1, { star: 4, count: 1 }, 'Thank you!']);
+
   // stats ranges
   r = await api('GET', `/api/queues/${qid}/stats?days=7`, { token: staff });
   assert.equal(r.status, 200);

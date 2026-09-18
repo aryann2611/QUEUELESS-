@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { Queue, Token, ExpressOrder, CATEGORIES } from '../models.js';
+import { Queue, Token, ExpressOrder, Review, CATEGORIES } from '../models.js';
 import { paymentsEnabled, publicKeyId, createOrder, verifyPayment } from '../payments.js';
 import { sales } from '../sales.js';
+import { reviewsFor, refreshRating, pubReview } from '../reviews.js';
 import { authRequired, authOptional, requireRole, fail, field, shape, owns } from '../auth.js';
 import { approved, joinQueue, callNext, markArrived, recallToken, releaseStranded, ticketFor, queueState, queueStats, summary, broadcastQueue, ACTIVE, expressSlotsLeft } from '../queue.js';
 
@@ -96,6 +97,8 @@ r.patch('/:id', authRequired, async (req, res) => {
     const v = field(req, name, type, true);
     if (v !== undefined) queue[name] = v;
   }
+  if (queue.isModified('image') && queue.image && !/^https:\/\/\S+$/.test(queue.image) && !(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(queue.image) && queue.image.length <= 700_000))
+    throw fail(400, 'image must be an https URL or an uploaded photo under 500 KB');
   if (req.body.category !== undefined) {
     if (!CATEGORIES.includes(req.body.category)) throw fail(400, 'invalid category');
     queue.category = req.body.category;
@@ -134,6 +137,35 @@ r.patch('/:id', authRequired, async (req, res) => {
 });
 
 // Express join, step 1: create the Razorpay order the client will pay against.
+// Reviews: anyone can read them; only a customer who was served can write one, once per visit
+r.get('/:id/reviews', authOptional, async (req, res) => {
+  const queue = await getQueue(req, false);
+  if (!approved(queue) && !(req.user && owns(queue, req.user))) throw fail(404, 'queue not found');
+  res.json(await reviewsFor(queue._id));
+});
+
+r.post('/:id/reviews', authRequired, async (req, res) => {
+  const queue = await getQueue(req, false);
+  const rating = field(req, 'rating', 'number');
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw fail(400, 'rating must be 1-5');
+  const comment = (field(req, 'comment', 'string', true) ?? '').trim().slice(0, 500);
+  const token = await Token.findOne({ _id: field(req, 'tokenId', 'string'), queue: queue._id, user: req.user.id });
+  if (!token) throw fail(404, 'token not found');
+  if (token.status !== 'served') throw fail(400, 'you can review a visit once you have been served');
+  if (await Review.exists({ token: token._id })) throw fail(409, 'you already reviewed this visit');
+  const review = await Review.create({ queue: queue._id, user: req.user.id, token: token._id, rating, comment, service: token.service });
+  const summary = await refreshRating(queue._id);
+  res.status(201).json({ review: pubReview(await review.populate('user', 'name')), rating: summary });
+});
+
+r.patch('/:id/reviews/:rid', authRequired, async (req, res) => {
+  const queue = await getQueue(req, true);
+  const text = field(req, 'reply', 'string').trim().slice(0, 500);
+  const review = await Review.findOneAndUpdate({ _id: req.params.rid, queue: queue._id }, { reply: text ? { text, at: new Date() } : { text: undefined, at: undefined } }, { new: true }).populate('user', 'name');
+  if (!review) throw fail(404, 'review not found');
+  res.json({ review: pubReview(review) });
+});
+
 r.post('/:id/express/order', authRequired, async (req, res) => {
   const queue = await getQueue(req);
   if (!paymentsEnabled || !queue.express?.enabled || !(queue.express.price > 0)) throw fail(404, 'express slots are not offered here');

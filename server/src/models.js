@@ -31,7 +31,8 @@ const queueSchema = new Schema({
   category: { type: String, enum: CATEGORIES, default: 'other' },
   phone: { type: String, default: '' },
   email: { type: String, default: '' },
-  image: { type: String, default: '' },
+  image: { type: String, default: '' }, // https URL or a small data:image/* uploaded from the vendor's device
+  rating: { avg: { type: Number, default: 0 }, count: { type: Number, default: 0 } }, // denormalised from Review
   address: { street: String, city: String, state: String, pincode: String },
   hours: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' } },
   services: [{ name: { type: String, required: true, trim: true }, minutes: { type: Number, default: 5, min: 0 } }],
@@ -90,3 +91,14 @@ export const PushSubscription = mongoose.model('PushSubscription', new Schema({
   keys: { p256dh: { type: String, required: true }, auth: { type: String, required: true } },
   userAgent: { type: String, default: '' },
 }, { timestamps: true }));
+
+// One review per served token, so only customers who were actually served can rate a visit
+export const Review = mongoose.model('Review', new Schema({
+  queue: ref('Queue'),
+  user: ref('User'),
+  token: { type: Schema.Types.ObjectId, ref: 'Token', required: true, unique: true },
+  rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
+  comment: { type: String, default: '', maxlength: 500, trim: true },
+  service: { type: String, default: '' },
+  reply: { text: { type: String, maxlength: 500, trim: true }, at: Date }, // the owner's public answer
+}, { timestamps: true }).index({ queue: 1, createdAt: -1 }));

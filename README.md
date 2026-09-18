@@ -98,7 +98,7 @@ Push notifications need `localhost` or HTTPS (a browser rule for service workers
 
 **Customer** — map of nearby shops with live wait times, location accuracy shown honestly with a map pin to correct it; join a queue with a service; live ticket with position, ETA, which counter to go to and an arrive-by countdown; push notifications that reach a closed tab; appointments that check in as priority tokens; history.
 
-**Vendor** — one tile per counter with Next / Skip / Complete, Arrived check-in, grace-period auto-skip of no-shows, one-tap Recall; keyboard-driven (`N` `S` `C`, `1`–`n` picks the counter); shop profile, map pin, services with durations, hours; printable counter QR; analytics for today / 7 / 30 days with a weekday×hour heatmap; **express slots** — sell a capped number of front-of-line tokens per hour through Razorpay (never for government offices); **Sales** page — revenue, slots sold, paying customers, trend, revenue-by-day chart and every payment.
+**Vendor** — one tile per counter with Next / Skip / Complete, Arrived check-in, grace-period auto-skip of no-shows, one-tap Recall; keyboard-driven (`N` `S` `C`, `1`–`n` picks the counter); shop profile, map pin, services with durations, hours; printable counter QR; analytics for today / 7 / 30 days with a weekday×hour heatmap; **express slots** — sell a capped number of front-of-line tokens per hour through Razorpay (never for government offices); **Sales** page — revenue, slots sold, paying customers, trend, revenue-by-day chart and every payment; **Reviews** — average, star histogram, per-service ratings and public replies; cover photo upload (shrunk in the browser) or URL.
 
 **Admin** — approve, suspend or restore businesses (new ones are hidden until approved); users and roles; platform stats; **Transactions** — every express payment across the platform with per-shop breakdown.
 
@@ -121,11 +121,12 @@ Queue (= shop)   { name, description, owner→User, category, status: pending|ap
                    express{enabled, price (₹), perHour},
                    avgServiceMinutes, isOpen, counters (1–20), graceMinutes (0 = off),
                    counter, counterDate, currentToken→Token,
-                   phone, email, image, address{street,city,state,pincode}, hours{open,close},
+                   phone, email, image (https URL or data:image ≤500 KB), rating{avg, count}, address{street,city,state,pincode}, hours{open,close},
                    services[{name, minutes}], location: GeoJSON Point [lng, lat] (2dsphere) }
 Token            { queue, user, number, priority, service, status: waiting|serving|served|skipped|left,
                    counter, calledAt, arrivedAt, doneAt, pushed[], express{orderId, paymentId, amount} }   unique: one active token per user per queue
 ExpressOrder     { orderId (unique), queue, user, amount, used }    a Razorpay order, consumed once by the join that pays for it
+Review           { queue, user, token (unique → one per served visit), rating 1-5, comment, service, reply{text, at} }
 Appointment      { queue, user, at, service, note, status: booked|checked_in|cancelled|completed, token }
 PushSubscription { user, endpoint (unique), keys{p256dh, auth}, userAgent }
 ```
@@ -156,6 +157,8 @@ PushSubscription { user, endpoint (unique), keys{p256dh, auth}, userAgent }
 | POST | `/api/queues/:id/next` · `/skip` · `/complete` | owner/admin | `{ counter? }` (default 1) |
 | POST | `/api/queues/:id/arrived/:tokenId` · `/recall/:tokenId` | owner/admin | check in · un-skip |
 | GET | `/api/queues/:id/stats` | owner/admin | `?days=1|7|30` — totals, avg wait, per-hour, per-day, weekday×hour heatmap |
+| GET · POST | `/api/queues/:id/reviews` | any · served customer | summary + list · `{ tokenId, rating 1-5, comment? }` once per served visit |
+| PATCH | `/api/queues/:id/reviews/:rid` | owner/admin | `{ reply }` (empty removes) |
 | GET | `/api/queues/:id/sales` | owner/admin | `?days=7|30|90` — express revenue, count, paying customers, per-day, transactions |
 | GET | `/api/tokens/mine` · `/history` · `/:id` | any | tickets |
 | DELETE | `/api/tokens/:id` | owner | leave |
@@ -176,7 +179,7 @@ Guests may connect without a token. `queue:watch` / `queue:unwatch` (queueId) jo
 ## Layout
 
 ```
-server/  src/app.js (express + socket)  db.js  index.js  auth.js  models.js  queue.js  sales.js  payments.js  push.js
+server/  src/app.js (express + socket)  db.js  index.js  auth.js  models.js  queue.js  sales.js  reviews.js  payments.js  push.js
          src/routes/ auth queues tokens appointments admin push
          scripts/ seed vapid    test/queue.test.js
 client/  src/App.jsx  api.js  auth.jsx  public/sw.js (push service worker)

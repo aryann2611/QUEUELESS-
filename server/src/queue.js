@@ -1,4 +1,4 @@
-import { Queue, Token } from './models.js';
+import { Queue, Token, Review } from './models.js';
 import { fail } from './auth.js';
 import { sendPush } from './push.js';
 import { paymentsEnabled } from './payments.js';
@@ -23,6 +23,7 @@ export const summary = (queue, waiting = []) => ({
   category: queue.category,
   status: queue.status || 'approved',
   image: queue.image,
+  rating: { avg: queue.rating?.avg ?? 0, count: queue.rating?.count ?? 0 },
   phone: queue.phone,
   email: queue.email,
   address: queue.address,
@@ -149,6 +150,7 @@ export async function ticketFor(token) {
     ? (await Token.find({ queue: queue._id, status: 'waiting' }).sort(ORDER).select('number')).map((t) => t.number)
     : [];
   const grace = queue.graceMinutes || 0;
+  const review = token.status === 'served' ? await Review.findOne({ token: token._id }).select('rating comment') : null;
   return {
     _id: token._id,
     number: token.number,
@@ -170,6 +172,7 @@ export async function ticketFor(token) {
     ahead,
     etaMinutes,
     etaAt: new Date(), // the client counts the estimate down from this moment between updates
+    review: review ? { rating: review.rating, comment: review.comment } : null, // served tokens: what the customer said, if anything
     createdAt: token.createdAt,
   };
 }

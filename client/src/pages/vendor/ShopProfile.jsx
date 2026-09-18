@@ -1,11 +1,32 @@
-import { useEffect, useState } from 'react'
-import { Save, Building2, MapPin, Clock, Image as ImageIcon, QrCode as QrCodeIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Save, Building2, MapPin, Clock, Image as ImageIcon, QrCode as QrCodeIcon, Upload, Trash2, Link as LinkIcon } from 'lucide-react'
 import { api } from '../../api.js'
 import { useVendor } from './VendorContext.jsx'
 import { CATEGORIES } from '../../lib/format.js'
 import { Button, Field, Input, Select, Textarea, Alert, PageTransition, cx } from '../../ui/index.jsx'
 import { QrPoster } from '../../components/QrCode.jsx'
 import { useToast } from '../../ui/Toast.jsx'
+
+/** Shrink a chosen photo to ≤1280px JPEG in the browser so the upload stays small and looks the same everywhere. */
+function readCover(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Choose a JPG, PNG or WebP photo.'))
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height))
+      const c = document.createElement('canvas')
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale)
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      let q = 0.85, out = c.toDataURL('image/jpeg', q)
+      while (out.length > 480_000 && q > 0.4) out = c.toDataURL('image/jpeg', (q -= 0.1))
+      out.length > 480_000 ? reject(new Error('That photo is too detailed to shrink — try a smaller one.')) : resolve(out)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("We couldn't read that image.")) }
+    img.src = url
+  })
+}
 
 const Section = ({ icon: Icon, title, desc, children }) => (
   <section className="form-section">
@@ -20,6 +41,8 @@ export default function ShopProfile() {
   const [f, setF] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [urlMode, setUrlMode] = useState(false)
+  const fileRef = useRef(null)
   useEffect(() => { if (shop && !f) setF({ name: shop.name, category: shop.category, description: shop.description || '', phone: shop.phone || '', email: shop.email || '', image: shop.image || '', address: { street: '', city: '', state: '', pincode: '', ...shop.address }, hours: { open: '09:00', close: '18:00', ...shop.hours } }) }, [shop, f])
   if (!f) return null
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -47,11 +70,19 @@ export default function ShopProfile() {
             <Field label="Email" htmlFor="sp-email"><Input id="sp-email" type="email" value={f.email} onChange={set('email')} placeholder="hello@yourshop.com" /></Field>
           </div>
         </Section>
-        <Section icon={ImageIcon} title="Cover image" desc="Optional. A URL to a photo of your storefront.">
-          <div className="row gap-4 wrap">
-            <Field label="Image URL" htmlFor="sp-img" className="grow"><Input id="sp-img" type="url" value={f.image} onChange={set('image')} placeholder="https://…" /></Field>
-            {f.image && <img src={f.image} alt="" className="cover-preview" onError={(e) => { e.currentTarget.style.display = 'none' }} />}
+        <Section icon={ImageIcon} title="Cover photo" desc="Shown at the top of your page and on listings. A real photo of your storefront or counter builds trust — landscape, at least 1000px wide.">
+          <div className="cover-drop">
+            {f.image
+              ? <img src={f.image} alt="Cover preview" className="cover-preview-lg" onError={(e) => { e.currentTarget.replaceWith(Object.assign(document.createElement('div'), { className: 'cover-empty', textContent: "This image can't be loaded — pick another." })) }} />
+              : <div className="cover-empty"><span className="small">No photo yet. Customers see a plain header until you add one.</span></div>}
+            <div className="stack gap-2">
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={async (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; try { setF({ ...f, image: await readCover(file) }); setUrlMode(false) } catch (err) { toast.error(err.message) } }} />
+              <Button type="button" variant="secondary" icon={Upload} onClick={() => fileRef.current?.click()}>{f.image ? 'Replace photo' : 'Upload photo'}</Button>
+              <Button type="button" variant="ghost" size="sm" icon={LinkIcon} onClick={() => setUrlMode((v) => !v)}>Use a link instead</Button>
+              {f.image && <Button type="button" variant="ghost" size="sm" icon={Trash2} onClick={() => setF({ ...f, image: '' })}>Remove</Button>}
+            </div>
           </div>
+          {urlMode && <Field label="Image URL" htmlFor="sp-img" hint="Must start with https://"><Input id="sp-img" type="url" value={f.image.startsWith('data:') ? '' : f.image} onChange={set('image')} placeholder="https://…" /></Field>}
         </Section>
         <Section icon={MapPin} title="Address" desc="Shown on your page and used for directions.">
           <Field label="Street" htmlFor="sp-street"><Input id="sp-street" value={f.address.street} onChange={setA('street')} /></Field>

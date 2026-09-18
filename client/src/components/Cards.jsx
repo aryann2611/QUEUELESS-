@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { MapPin, Clock, Users, ArrowRight, Bell, CheckCircle2, AlertTriangle, Info, XCircle, CalendarDays, Ticket, Check } from 'lucide-react'
 import { category, fmtKm, fmtMin, fmtDate, fmtTime, timeAgo } from '../lib/format.js'
 import { useLiveEta } from '../lib/hooks.js'
+import { RatingPill } from './Reviews.jsx'
 import { Badge, Button, Card, LiveDot, AnimatedNumber, cx, fadeUp } from '../ui/index.jsx'
 
 /** Shop in a list (nearby, home, search). */
@@ -13,12 +14,14 @@ export function ShopCard({ shop, selected, onSelect, compact, animate = true }) 
     <Wrap variants={animate ? fadeUp : undefined} layout={animate ? 'position' : undefined}
       className={cx('card card-hover shop-card', compact && 'card-sm', selected && 'selected')}
       onMouseEnter={() => onSelect?.(shop._id)} onFocus={() => onSelect?.(shop._id)}>
+      {!compact && shop.image && <img src={shop.image} alt="" className="shop-card-cover" loading="lazy" onError={(e) => { e.currentTarget.remove() }} />}
       <div className="shop-card-head">
         <span className={cx('icon-box', shop.category)}><cat.icon aria-hidden /></span>
         <div className="grow" style={{ minWidth: 0 }}>
           <h3 className="truncate"><Link to={`/shop/${shop._id}`} className="stretched">{shop.name}</Link></h3>
           <div className="small muted row gap-2 wrap">
             <span>{cat.label}</span>
+            {shop.rating?.count > 0 && <><span aria-hidden>·</span><RatingPill rating={shop.rating} /></>}
             {shop.distanceKm != null && <><span aria-hidden>·</span><span className="row gap-1"><MapPin style={{ width: 13 }} aria-hidden />{fmtKm(shop.distanceKm)}</span></>}
           </div>
         </div>

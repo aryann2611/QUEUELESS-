@@ -12,16 +12,19 @@ import { GoogleMap } from '../components/Map.jsx'
 import { ServiceCard, QueueTimeline } from '../components/Cards.jsx'
 import { JoinQueueModal } from '../components/JoinQueue.jsx'
 import { BookAppointmentModal } from '../components/BookAppointment.jsx'
+import { RatingPill, RatingSummary, ReviewList } from '../components/Reviews.jsx'
 
 export default function Shop() {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
   const { data, error, loading, reload, setData } = useFetch(`/api/queues/${id}`)
+  const reviews = useFetch(`/api/queues/${id}/reviews`)
   const [join, setJoin] = useState(false)
   const [book, setBook] = useState(false)
   const [mine, setMine] = useState(null)
   const [imgOk, setImgOk] = useState(true)
+  const [allReviews, setAllReviews] = useState(false)
   const me = readSavedLocation()
 
   useQueueWatch([id], (u) => setData((d) => d && { ...d, queue: applyUpdate(d.queue, u), waiting: u.waitingNumbers.map((n) => ({ _id: n, number: n })) }))
@@ -52,6 +55,7 @@ export default function Shop() {
                 <div className="row gap-3 wrap small mt-2">
                   <Badge tone={shop.isOpen ? 'open' : 'closed'}>{shop.isOpen ? <><LiveDot />Open</> : 'Closed'}</Badge>
                   <span>{cat.label}</span>
+                  <RatingPill rating={shop.rating} />
                   {distance != null && <span className="row gap-1"><MapPin aria-hidden style={{ width: 14 }} />{fmtKm(distance)} away</span>}
                   {shop.hours?.open && <span className="row gap-1"><Clock aria-hidden style={{ width: 14 }} />{fmtHour(shop.hours.open)} – {fmtHour(shop.hours.close)}</span>}
                 </div>
@@ -97,6 +101,18 @@ export default function Shop() {
                   {shop.email && <li><Mail aria-hidden /><a href={`mailto:${shop.email}`}>{shop.email}</a></li>}
                   <li><Users aria-hidden /><span>~{fmtMin(shop.avgServiceMinutes)} per customer on average</span></li>
                 </ul>
+              </div>
+            </section>
+          )}
+
+          {/* REVIEWS */}
+          {shop && (
+            <section className="mt-6">
+              <h2 className="mb-3" style={{ fontSize: '1.125rem' }}>Reviews</h2>
+              <div className="card stack gap-5">
+                {reviews.data?.count ? <RatingSummary summary={reviews.data} /> : <p className="muted small">No reviews yet. Customers can rate a visit once they've been served — yours could be the first.</p>}
+                {reviews.data?.count > 0 && <ReviewList reviews={allReviews ? reviews.data.reviews : reviews.data.reviews.slice(0, 6)} />}
+                {reviews.data?.reviews.length > 6 && !allReviews && <Button variant="secondary" size="sm" onClick={() => setAllReviews(true)} style={{ alignSelf: 'center' }}>Show more reviews</Button>}
               </div>
             </section>
           )}

@@ -8,9 +8,10 @@ import { pushState, subscribePush } from '../../lib/push.js'
 import { useNotifications } from '../../lib/notifications.jsx'
 import { directionsUrl } from '../../lib/geo.js'
 import { fmtMin, category } from '../../lib/format.js'
-import { Button, Badge, LiveDot, AnimatedNumber, Skeleton, ErrorState, EmptyState, PageTransition, Alert, cx } from '../../ui/index.jsx'
+import { Button, Badge, LiveDot, AnimatedNumber, Skeleton, ErrorState, EmptyState, PageTransition, Alert, Textarea, cx } from '../../ui/index.jsx'
 import { Modal } from '../../ui/Modal.jsx'
 import { QueueTimeline } from '../../components/Cards.jsx'
+import { StarPicker, Stars } from '../../components/Reviews.jsx'
 import { useToast } from '../../ui/Toast.jsx'
 
 /** Counts down the shop's grace period — how long the customer still has to reach the counter. */
@@ -21,6 +22,32 @@ function ArriveBy({ at }) {
   if (left <= 0) return <>Check in at the counter now — your token can be skipped.</>
   const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000)
   return <>You have <b className="num">{m}:{String(s).padStart(2, '0')}</b> to get there.</>
+}
+
+/** Rate a served visit: stars, an optional comment, one submission per token. */
+function ReviewForm({ ticket, onDone }) {
+  const toast = useToast()
+  const [rating, setRating] = useState(0)
+  const [comment, setComment] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(e) {
+    e.preventDefault()
+    if (!rating) return toast.error('Pick a star rating first.')
+    setBusy(true)
+    try {
+      const { review } = await api(`/api/queues/${ticket.queue._id}/reviews`, { method: 'POST', body: { tokenId: ticket._id, rating, comment } })
+      onDone({ rating: review.rating, comment: review.comment })
+      toast.success('Thanks for the review!')
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <form onSubmit={submit} className="review-form mt-5">
+      <b>How was your visit{ticket.service ? ` for ${ticket.service}` : ''}?</b>
+      <StarPicker value={rating} onChange={setRating} />
+      {rating > 0 && <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} maxLength={500} placeholder={`Anything ${ticket.queue.name} should know? (optional)`} />}
+      {rating > 0 && <Button type="submit" variant="primary" loading={busy}>Submit review</Button>}
+    </form>
+  )
 }
 
 const FINAL = {
@@ -109,6 +136,9 @@ export default function Ticket() {
             <h2>{done.title}</h2>
             <p className="muted">{done.body}</p>
             <span className="eyebrow mt-3">Token</span><span className="num" style={{ fontSize: '2rem', fontWeight: 700 }}>#{ticket.number}</span>
+            {ticket.status === 'served' && (ticket.review
+              ? <div className="stack gap-1 mt-5" style={{ alignItems: 'center' }}><span className="small muted">You rated this visit</span><Stars value={ticket.review.rating} size={22} />{ticket.review.comment && <p className="small muted" style={{ maxWidth: 360 }}>“{ticket.review.comment}”</p>}</div>
+              : <ReviewForm ticket={ticket} onDone={(review) => setTicket((t) => ({ ...t, review }))} />)}
             <div className="row gap-2 wrap mt-4" style={{ justifyContent: 'center' }}><Button variant="primary" to="/nearby" icon={MapPin}>Find another queue</Button><Button variant="secondary" to="/app">Home</Button></div>
           </motion.div>
         ) : (
