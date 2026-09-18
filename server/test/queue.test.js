@@ -38,7 +38,8 @@ async function api(method, path, { token, body } = {}) {
     headers: { ...(body && { 'content-type': 'application/json' }), ...(token && { authorization: `Bearer ${token}` }) },
     body: body && JSON.stringify(body),
   });
-  return { status: res.status, body: await res.json() };
+  const ct = res.headers.get('content-type') || '';
+  return { status: res.status, body: ct.includes('json') ? await res.json() : await res.arrayBuffer() };
 }
 
 async function register(name, role) {
@@ -365,6 +366,21 @@ test('queue flow over HTTP', async () => {
   assert.equal(r.body.review.reply.text, 'Thank you!');
   r = await api('GET', `/api/queues/${qid}/reviews`);
   assert.deepEqual([r.body.avg, r.body.count, r.body.byStar[1], r.body.reviews[0].reply.text], [4, 1, { star: 4, count: 1 }, 'Thank you!']);
+
+  // ---- cover photo: an upload is stored as a data URI, handed back as a URL, and saving the profile again keeps it ----
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  r = await api('PATCH', `/api/queues/${qid}`, { token: staff, body: { image: 'javascript:alert(1)' } });
+  assert.equal(r.status, 400);
+  r = await api('PATCH', `/api/queues/${qid}`, { token: staff, body: { image: png } });
+  assert.equal(r.body.queue.image, `/api/queues/${qid}/cover`);
+  r = await api('PATCH', `/api/queues/${qid}`, { token: staff, body: { image: r.body.queue.image, name: 'Dr. Sharma Clinic' } });
+  assert.equal(r.body.queue.image, `/api/queues/${qid}/cover`);
+  r = await api('GET', `/api/queues/${qid}/cover`);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.byteLength, 70);
+  r = await api('PATCH', `/api/queues/${qid}`, { token: staff, body: { image: '' } });
+  r = await api('GET', `/api/queues/${qid}/cover`);
+  assert.equal(r.status, 404);
 
   // stats ranges
   r = await api('GET', `/api/queues/${qid}/stats?days=7`, { token: staff });

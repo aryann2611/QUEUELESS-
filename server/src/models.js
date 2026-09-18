@@ -7,16 +7,16 @@ export const CATEGORIES = ['medical', 'salon', 'bank', 'government', 'repair', '
 export const SHOP_STATUS = ['pending', 'approved', 'suspended'];
 
 export const User = mongoose.model('User', new Schema({
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  name: { type: String, required: true, trim: true, maxlength: 80 },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 160 },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['user', 'staff', 'admin'], default: 'user' },
 }, { timestamps: true }));
 
 // A Queue is a business ("shop") with one live queue served by one or more counters. Shop profile fields live here too.
 const queueSchema = new Schema({
-  name: { type: String, required: true, trim: true },
-  description: { type: String, default: '' },
+  name: { type: String, required: true, trim: true, maxlength: 80 },
+  description: { type: String, default: '', maxlength: 600 },
   owner: ref('User'),
   avgServiceMinutes: { type: Number, default: 5, min: 0 },
   isOpen: { type: Boolean, default: true },
@@ -29,13 +29,13 @@ const queueSchema = new Schema({
   express: { enabled: { type: Boolean, default: false }, price: { type: Number, default: 0, min: 0 }, perHour: { type: Number, default: 2, min: 1, max: 20 } },
   status: { type: String, enum: SHOP_STATUS, default: () => (process.env.AUTO_APPROVE_SHOPS === '1' ? 'approved' : 'pending') },
   category: { type: String, enum: CATEGORIES, default: 'other' },
-  phone: { type: String, default: '' },
-  email: { type: String, default: '' },
+  phone: { type: String, default: '', maxlength: 30 },
+  email: { type: String, default: '', maxlength: 160 },
   image: { type: String, default: '' }, // https URL or a small data:image/* uploaded from the vendor's device
   rating: { avg: { type: Number, default: 0 }, count: { type: Number, default: 0 } }, // denormalised from Review
-  address: { street: String, city: String, state: String, pincode: String },
+  address: { street: { type: String, maxlength: 160 }, city: { type: String, maxlength: 80 }, state: { type: String, maxlength: 80 }, pincode: { type: String, maxlength: 12 } },
   hours: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' } },
-  services: [{ name: { type: String, required: true, trim: true }, minutes: { type: Number, default: 5, min: 0 } }],
+  services: [{ name: { type: String, required: true, trim: true, maxlength: 60 }, minutes: { type: Number, default: 5, min: 0 } }],
   // GeoJSON Point [lng, lat]; absent until the vendor sets a location (2dsphere index skips docs without it)
   location: {
     type: { type: String, enum: ['Point'] },
@@ -60,6 +60,7 @@ const tokenSchema = new Schema({
   express: { orderId: String, paymentId: String, amount: Number }, // set when the token was bought as an express slot
 }, { timestamps: true });
 tokenSchema.index({ queue: 1, status: 1 });
+tokenSchema.index({ queue: 1, createdAt: -1 }); // analytics, sales and history are all date-range scans per shop
 tokenSchema.index({ queue: 1, user: 1 }, { unique: true, partialFilterExpression: { status: { $in: ['waiting', 'serving'] } } });
 export const Token = mongoose.model('Token', tokenSchema);
 

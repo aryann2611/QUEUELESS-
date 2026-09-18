@@ -1,10 +1,11 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { Queue, Token, ExpressOrder, Review, CATEGORIES } from '../models.js';
 import { paymentsEnabled, publicKeyId, createOrder, verifyPayment } from '../payments.js';
 import { sales } from '../sales.js';
 import { reviewsFor, refreshRating, pubReview } from '../reviews.js';
 import { authRequired, authOptional, requireRole, fail, field, shape, owns } from '../auth.js';
-import { approved, joinQueue, callNext, markArrived, recallToken, releaseStranded, ticketFor, queueState, queueStats, summary, broadcastQueue, ACTIVE, expressSlotsLeft } from '../queue.js';
+import { coverPath, approved, joinQueue, callNext, markArrived, recallToken, releaseStranded, ticketFor, queueState, queueStats, summary, broadcastQueue, ACTIVE, expressSlotsLeft } from '../queue.js';
 
 const r = Router();
 
@@ -15,7 +16,13 @@ async function getQueue(req, mustOwn) {
   return queue;
 }
 
-const withCounts = (queues) => Promise.all(queues.map(async (q) => summary(q, await Token.find({ queue: q._id, status: 'waiting' }).select('service'))));
+// One aggregate for the whole list instead of a query per shop
+async function withCounts(queues) {
+  if (!queues.length) return [];
+  const rows = await Token.aggregate([{ $match: { queue: { $in: queues.map((q) => q._id) }, status: 'waiting' } }, { $group: { _id: '$queue', tokens: { $push: { service: '$service' } } } }]);
+  const waiting = new Map(rows.map((r) => [String(r._id), r.tokens]));
+  return queues.map((q) => summary(q, waiting.get(String(q._id)) || []));
+}
 
 // Only approved businesses are listed publicly (owners/admins see their own pending ones via /:id)
 const PUBLIC = { status: { $ne: 'suspended' }, $or: [{ status: 'approved' }, { status: { $exists: false } }] };
@@ -78,6 +85,15 @@ r.get('/:id', authOptional, async (req, res) => {
   res.json(await queueState(queue, owns(queue, req.user)));
 });
 
+// An uploaded cover photo is stored as a data URI but served from here, so list payloads stay small and browsers can cache it
+r.get('/:id/cover', async (req, res) => {
+  const queue = await Queue.findById(req.params.id).select('image updatedAt');
+  const m = queue?.image?.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!m) throw fail(404, 'no photo');
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400', 'Last-Modified': queue.updatedAt.toUTCString() });
+  res.send(Buffer.from(m[2], 'base64'));
+});
+
 r.get('/:id/stats', authRequired, async (req, res) => {
   const queue = await getQueue(req, true);
   const days = [1, 7, 30].includes(Number(req.query.days)) ? Number(req.query.days) : 1;
@@ -95,7 +111,8 @@ r.patch('/:id', authRequired, async (req, res) => {
   const queue = await getQueue(req, true);
   for (const [name, type] of Object.entries({ name: 'string', description: 'string', avgServiceMinutes: 'number', isOpen: 'boolean', phone: 'string', email: 'string', image: 'string', counters: 'number', graceMinutes: 'number' })) {
     const v = field(req, name, type, true);
-    if (v !== undefined) queue[name] = v;
+    if (v === undefined || (name === 'image' && v === coverPath(queue))) continue; // the cover path is how we hand an upload back; it isn't a new value
+    queue[name] = v;
   }
   if (queue.isModified('image') && queue.image && !/^https:\/\/\S+$/.test(queue.image) && !(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(queue.image) && queue.image.length <= 700_000))
     throw fail(400, 'image must be an https URL or an uploaded photo under 500 KB');
@@ -144,7 +161,8 @@ r.get('/:id/reviews', authOptional, async (req, res) => {
   res.json(await reviewsFor(queue._id));
 });
 
-r.post('/:id/reviews', authRequired, async (req, res) => {
+const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, skip: () => process.env.NODE_ENV === 'test', message: { error: 'too many reviews, try again later' } });
+r.post('/:id/reviews', authRequired, reviewLimit, async (req, res) => {
   const queue = await getQueue(req, false);
   const rating = field(req, 'rating', 'number');
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw fail(400, 'rating must be 1-5');

@@ -82,7 +82,7 @@ export default function ShopProfile() {
               {f.image && <Button type="button" variant="ghost" size="sm" icon={Trash2} onClick={() => setF({ ...f, image: '' })}>Remove</Button>}
             </div>
           </div>
-          {urlMode && <Field label="Image URL" htmlFor="sp-img" hint="Must start with https://"><Input id="sp-img" type="url" value={f.image.startsWith('data:') ? '' : f.image} onChange={set('image')} placeholder="https://…" /></Field>}
+          {urlMode && <Field label="Image URL" htmlFor="sp-img" hint="Must start with https://"><Input id="sp-img" type="url" value={f.image.startsWith('data:') || f.image.startsWith('/api/') ? '' : f.image} onChange={set('image')} placeholder="https://…" /></Field>}
         </Section>
         <Section icon={MapPin} title="Address" desc="Shown on your page and used for directions.">
           <Field label="Street" htmlFor="sp-street"><Input id="sp-street" value={f.address.street} onChange={setA('street')} /></Field>

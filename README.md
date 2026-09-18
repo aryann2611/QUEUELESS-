@@ -56,6 +56,26 @@ cd client && npm install && npm run dev      # http://localhost:5173
 
 Only one process can use the embedded database at a time. Starting a second server, or a server while `npm run seed` is still running, fails immediately with a message saying so.
 
+### Production (Render, Railway, a VPS — anything that runs Node or Docker)
+
+The server refuses to start in production without `MONGO_URI` and `JWT_SECRET`, so a misconfigured deploy fails loudly instead of silently using an empty database or accepting any token.
+
+| Setting | Value |
+|---|---|
+| Build command | `cd client && npm ci && npm run build && cd ../server && npm ci --omit=dev` |
+| Start command | `cd server && node src/index.js` (not `npm start` — that expects a `.env` file) |
+| Health check | `/healthz` |
+| `NODE_ENV` | `production` |
+| `MONGO_URI` | your Atlas string, e.g. `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/queueless?retryWrites=true&w=majority` — in Atlas → Network Access, allow the host's IP (or `0.0.0.0/0` for platforms without a fixed egress IP) |
+| `JWT_SECRET` | `openssl rand -hex 32` |
+| `ADMIN_EMAIL` | the email that gets the admin role on registration |
+| `TRUST_PROXY` | `1` (behind Render/Railway/nginx, so rate limits see real client IPs) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | from `npm run vapid` — optional, enables background push |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | live keys from the Razorpay dashboard — optional, enables express slots |
+| `SEED` | leave unset in production (`1` fills the database with sample shops) |
+
+Or build the Docker image (`docker build -t queueless .`) and run it with the same variables. Before going live: register the admin with `ADMIN_EMAIL`, register each real shop owner as a business (they start *pending* until the admin approves them), and switch Razorpay from `rzp_test_` to live keys.
+
 ## Environment
 
 `server/.env`
@@ -195,4 +215,4 @@ Dockerfile  docker-compose.yml
 ## Stack
 
 **Server** — Node 20+, Express 5, Mongoose 8, Socket.IO 4, JWT, bcryptjs, web-push. ESM, `node --env-file`. Embedded MongoDB (`mongodb-memory-server`, dev only) or any `MONGO_URI`.
-**Client** — Vite, React 18, react-router 6, Framer Motion (+ GSAP ScrollTrigger, lazy-loaded, for scroll scrub only), Leaflet/OpenStreetMap or Google Maps, plain CSS with light and dark themes.
+**Client** — Vite, React 18, react-router 7, Framer Motion (+ GSAP ScrollTrigger, lazy-loaded, for scroll scrub only), Leaflet/OpenStreetMap or Google Maps, plain CSS with light and dark themes.

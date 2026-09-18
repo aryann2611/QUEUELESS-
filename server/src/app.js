@@ -28,6 +28,8 @@ app.use(express.json({ limit: '1mb' })); // room for an uploaded cover photo (ba
 const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, skip: () => process.env.NODE_ENV === 'test', message: { error: 'too many attempts, try again in 15 minutes' } });
 app.use('/api/auth/login', authLimit);
 app.use('/api/auth/register', authLimit);
+// a ceiling for everything else — generous enough for an office full of people behind one IP, low enough to blunt scraping
+app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 3000, standardHeaders: true, legacyHeaders: false, skip: () => process.env.NODE_ENV === 'test', message: { error: 'too many requests, slow down' } }));
 app.use('/api/auth', authRoutes);
 app.use('/api/queues', queueRoutes);
 app.use('/api/shops', queueRoutes); // alias: a shop is a queue

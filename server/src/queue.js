@@ -16,13 +16,17 @@ export const minutesFor = (queue, token) => queue.services?.find((s) => s.name =
 /** Wall-clock wait for a list of tokens ahead, spread over the shop's counters. */
 export const etaFor = (queue, tokens) => Math.round(tokens.reduce((sum, t) => sum + minutesFor(queue, t), 0) / Math.max(1, queue.counters || 1));
 
+/** Where an uploaded (data URI) cover is served from; links pass through untouched. */
+export const coverPath = (queue) => `/api/queues/${queue._id}/cover`;
+export const coverUrl = (queue) => (queue.image?.startsWith('data:') ? coverPath(queue) : queue.image);
+
 export const summary = (queue, waiting = []) => ({
   _id: queue._id,
   name: queue.name,
   description: queue.description,
   category: queue.category,
   status: queue.status || 'approved',
-  image: queue.image,
+  image: coverUrl(queue),
   rating: { avg: queue.rating?.avg ?? 0, count: queue.rating?.count ?? 0 },
   phone: queue.phone,
   email: queue.email,
