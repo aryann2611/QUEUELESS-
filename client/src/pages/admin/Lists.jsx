@@ -87,7 +87,7 @@ export function UsersPage({ vendors }) {
   return <TablePage title={vendors ? 'Vendors' : 'Users'} sub={vendors ? 'Accounts that manage a business.' : 'Everyone with a QueueLess account.'} icon={Users} rows={rows} loading={loading} error={error} reload={reload} empty={vendors ? 'No vendors yet.' : 'No users yet.'} searchKeys={[(u) => u.name, (u) => u.email, (u) => u.role]}
     columns={[
       { h: 'Name', cell: (u) => <span className="stack"><b>{u.name}</b><span className="xs muted">{u.email}</span></span> },
-      { h: 'Joined', cell: (u) => <span className="small muted">{u.createdAt ? fmtDate(u.createdAt) : '—'}</span> },
+      { h: 'Joined', cell: (u) => u.createdAt ? <span className="stack"><span className="small">{fmtDate(u.createdAt)}</span><span className="xs muted">{fmtTime(u.createdAt)}{fmtDate(u.createdAt) === 'Today' ? '' : ` · ${new Date(u.createdAt).getFullYear()}`}</span></span> : <span className="small muted">—</span> },
       { h: 'Role', w: 160, cell: (u) => u._id === me._id ? <Badge tone="primary">{u.role} (you)</Badge> : <Select value={u.role} onChange={(e) => setRole(u, e.target.value)} aria-label={`Role for ${u.name}`} style={{ height: 34 }}><option value="user">user</option><option value="staff">staff</option><option value="admin">admin</option></Select> },
     ]} />
 }
