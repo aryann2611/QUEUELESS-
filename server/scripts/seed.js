@@ -7,9 +7,9 @@ import { refreshRating } from '../src/reviews.js';
 
 const argLat = Number(process.argv[2]), argLng = Number(process.argv[3]);
 const CENTER = Number.isFinite(argLat) && Number.isFinite(argLng) ? { lat: argLat, lng: argLng }
-  : { lat: Number(process.env.SEED_LAT) || 26.4499, lng: Number(process.env.SEED_LNG) || 80.3319 }; // Kanpur
+  : { lat: Number(process.env.SEED_LAT) || 26.8492, lng: Number(process.env.SEED_LNG) || 80.8586 }; // Lucknow, same as .env.example — so a deploy without SEED_* lands where the docs say
 const PASSWORD = 'password';
-const CITY = { city: process.env.SEED_CITY || 'Kanpur', state: process.env.SEED_STATE || 'Uttar Pradesh', pin: Number(process.env.SEED_PINCODE) || 208001 };
+const CITY = { city: process.env.SEED_CITY || 'Lucknow', state: process.env.SEED_STATE || 'Uttar Pradesh', pin: Number(process.env.SEED_PINCODE) || 226001 };
 const img = (id) => `https://images.unsplash.com/${id}?w=1200&q=70&auto=format&fit=crop`;
 
 // dLat/dLng are offsets from CENTER in degrees (~0.01 ≈ 1.1 km). queue = people in line (first one is being served); served = done earlier today.

@@ -1,0 +1,24 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> this repo. Builds the Dockerfile on the free plan.
+# Values marked sync: false are prompted for once; JWT_SECRET is generated once and kept, so logins survive redeploys.
+services:
+  - type: web
+    name: queueless
+    runtime: docker
+    plan: free
+    region: singapore                   # closest to India; Atlas M0 in Mumbai (ap-south-1) pairs well
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: TRUST_PROXY
+        value: "1"                      # Render's proxy sits in front, so rate limits see the real client IP
+      - key: MONGO_URI
+        sync: false                     # Atlas connection string; Atlas -> Network Access must allow 0.0.0.0/0
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false                     # registering with this email yields the admin role
+      - key: SEED
+        value: "1"                      # sample shops + accounts on every boot (idempotent, never overwrites); remove once there is real data
+      # Optional, add in the dashboard later: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT (push, `npm run vapid`),
+      # RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET (express slots). Blank -> those features are simply hidden.

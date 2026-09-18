@@ -56,7 +56,15 @@ cd client && npm install && npm run dev      # http://localhost:5173
 
 Only one process can use the embedded database at a time. Starting a second server, or a server while `npm run seed` is still running, fails immediately with a message saying so.
 
-### Production (Render, Railway, a VPS — anything that runs Node or Docker)
+### Free on Render + MongoDB Atlas (public HTTPS URL, no card)
+
+1. [cloud.mongodb.com](https://cloud.mongodb.com) → Build a Database → **M0 Free** → Database Access: add a user → Network Access: `0.0.0.0/0` → Connect → copy the `mongodb+srv://…` string, fill in the password and put `/queueless` before the `?`.
+2. [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint** → this repo. `render.yaml` sets everything (Docker, free plan, health check, `TRUST_PROXY`, a generated `JWT_SECRET`, `SEED=1`) and prompts for `MONGO_URI` and `ADMIN_EMAIL`.
+3. Open the URL, register with `ADMIN_EMAIL` → you are admin. The map is OpenStreetMap, so it needs nothing.
+
+Accounts, shops and tokens live in Atlas, so they survive every redeploy; `JWT_SECRET` is generated once and kept, so nobody is logged out by a deploy. The free instance sleeps after 15 idle minutes (first request then takes ~30–60 s); a free uptime pinger on `/healthz` every 10 minutes keeps it awake within the 750 h/month allowance. Push needs `VAPID_*` keys (`cd server && npm run vapid`) added under Environment; `SEED=1` is idempotent and can stay, or be removed once there is real data.
+
+### Production elsewhere (Railway, a VPS — anything that runs Node or Docker)
 
 The server refuses to start in production without `MONGO_URI` and `JWT_SECRET`, so a misconfigured deploy fails loudly instead of silently using an empty database or accepting any token.
 
@@ -209,7 +217,7 @@ client/  src/App.jsx  api.js  auth.jsx  public/sw.js (push service worker)
          pages/  Landing Login Nearby Shop  user/(Home Ticket Appointments Notifications Profile)
                  vendor/(VendorContext Overview LiveQueue Appointments ShopProfile Location Services Analytics Settings)
                  admin/(Dashboard Lists)
-Dockerfile  docker-compose.yml
+Dockerfile  docker-compose.yml  render.yaml
 ```
 
 ## Stack
